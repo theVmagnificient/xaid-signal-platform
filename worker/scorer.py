@@ -116,11 +116,12 @@ NEWS_KEYWORDS = {
         "score": 9,
         "subtype": "ai_adoption",
         "keywords": [
+            # Radiology AI vendors
             "aidoc", "gleamer", "nuance powerscribe", "viz.ai", "rapid ai",
             "rad ai", "zebra medical", "bayer calantic",
-            "ai-assisted reading", "ai-powered workflow", "ai radiology",
+            # Radiology-specific AI terms
+            "ai-assisted reading", "ai radiology",
             "artificial intelligence radiology", "machine learning radiology",
-            "automated reporting", "ai-generated report",
         ],
     },
     "pacs_upgrade": {
@@ -137,9 +138,6 @@ NEWS_KEYWORDS = {
         "score": 6,
         "subtype": "tech_adoption",
         "keywords": [
-            "implements ai", "adopts ai", "deploys ai", "partners with",
-            "integrates ai", "launches ai", "digital transformation",
-            "workflow optimization", "cloud migration",
             "opens new imaging center", "expands radiology",
             "acquires imaging", "acquires radiology",
         ],
