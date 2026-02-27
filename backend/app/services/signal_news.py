@@ -1,6 +1,6 @@
 """
 News signal collector.
-Uses Google News RSS (free) + optional Exa.ai semantic search.
+Uses Google News RSS (free) + optional Brave Search News API.
 Detects: AI adoption, PACS upgrades, tech announcements.
 """
 
@@ -60,19 +60,22 @@ async def fetch_google_news(company_name: str, extra_query: str = "radiology AI"
         return []
 
 
-async def fetch_exa_news(company_name: str, api_key: str) -> list[dict]:
-    """Use Exa.ai for semantic news search. Optional — requires API key."""
+async def fetch_brave_news(company_name: str, api_key: str) -> list[dict]:
+    """Brave Search News API — keyword search, plain-text descriptions, no HTML."""
     try:
+        query = f'"{company_name}" radiology AI OR PACS OR imaging'
         async with httpx.AsyncClient(timeout=15) as client:
-            resp = await client.post(
-                "https://api.exa.ai/search",
-                headers={"x-api-key": api_key, "Content-Type": "application/json"},
-                json={
-                    "query": f"{company_name} radiology AI adoption PACS technology",
-                    "numResults": 5,
-                    "type": "neural",
-                    "useAutoprompt": True,
-                    "startPublishedDate": "2024-01-01",
+            resp = await client.get(
+                "https://api.search.brave.com/res/v1/news/search",
+                headers={
+                    "X-Subscription-Token": api_key,
+                    "Accept": "application/json",
+                },
+                params={
+                    "q": query,
+                    "count": 5,
+                    "freshness": "pm",  # past month
+                    "country": "us",
                 },
             )
             if resp.status_code != 200:
@@ -80,12 +83,13 @@ async def fetch_exa_news(company_name: str, api_key: str) -> list[dict]:
             data = resp.json()
             items = []
             for r in data.get("results", []):
+                source = r.get("meta_url", {}).get("hostname", "") or r.get("source", "Brave News")
                 items.append({
                     "title": r.get("title", ""),
-                    "summary": r.get("text", "")[:300],
+                    "summary": r.get("description", ""),
                     "url": r.get("url", ""),
-                    "source": "Exa.ai",
-                    "published": r.get("publishedDate", ""),
+                    "source": source,
+                    "published": r.get("age", ""),
                 })
             return items
     except Exception:
@@ -111,10 +115,10 @@ async def collect_news_signals(
         # Fetch from Google News (free)
         news_items = await fetch_google_news(company_name)
 
-        # Optionally augment with Exa.ai
-        if settings.exa_api_key:
-            exa_items = await fetch_exa_news(company_name, settings.exa_api_key)
-            news_items.extend(exa_items)
+        # Optionally augment with Brave Search News
+        if settings.brave_api_key:
+            brave_items = await fetch_brave_news(company_name, settings.brave_api_key)
+            news_items.extend(brave_items)
 
         # Deduplicate by URL
         seen_urls: set[str] = set()
