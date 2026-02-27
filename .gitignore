@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Environment
+.env
+.env.local
+*.env
+
+# Node
+node_modules/
+.next/
+out/
+.vercel/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Data files (sensitive)
+*.xlsx
+*.csv
+
+# Logs
+*.log
