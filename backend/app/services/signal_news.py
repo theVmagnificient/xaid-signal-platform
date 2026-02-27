@@ -7,10 +7,24 @@ Detects: AI adoption, PACS upgrades, tech announcements.
 import feedparser
 import httpx
 import asyncio
+import re
+import html as html_lib
 from datetime import datetime, timezone
 from typing import Optional
 from app.services.scorer import score_news
 from app.config import get_settings
+
+
+def _strip_html(text: str) -> str:
+    """Strip HTML tags and decode entities from a string."""
+    if not text:
+        return text
+    # Remove all HTML tags
+    text = re.sub(r'<[^>]+>', '', text)
+    # Decode HTML entities (&amp; &nbsp; &lt; etc.)
+    text = html_lib.unescape(text)
+    # Normalize whitespace
+    return ' '.join(text.split()).strip()
 
 # Google News RSS base URL
 GOOGLE_NEWS_RSS = "https://news.google.com/rss/search?q={query}&hl=en-US&gl=US&ceid=US:en"
@@ -130,7 +144,7 @@ async def collect_news_signals(
                 "signal_type": "news",
                 "signal_subtype": subtype,
                 "title": f"[News] {item['title']}",
-                "description": item.get("summary", "")[:500],
+                "description": _strip_html(item.get("summary", ""))[:500],
                 "score": score,
                 "source_url": url,
                 "source_name": item.get("source", ""),
