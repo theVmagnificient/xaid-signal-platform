@@ -112,10 +112,12 @@ async def collect_news_signals(
         company_name = company["name"]
         company_id = company["id"]
 
-        # Fetch from Google News (free) — two passes: radiology AI + funding
+        # Fetch from Google News (free) — multiple targeted passes
         news_items = await fetch_google_news(company_name, "radiology AI")
-        funding_items = await fetch_google_news(company_name, "funding raises investment radiology")
+        funding_items = await fetch_google_news(company_name, "funding raises private equity acquisition radiology")
+        backlog_items = await fetch_google_news(company_name, "radiology backlog staffing shortage wait times")
         news_items.extend(funding_items)
+        news_items.extend(backlog_items)
 
         # Optionally augment with Brave Search News
         if settings.brave_api_key:

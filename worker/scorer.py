@@ -151,6 +151,26 @@ NEWS_KEYWORDS = {
             "venture capital", "secures investment", "raises funding",
         ],
     },
+    "pe_acquisition": {
+        "score": 9,
+        "subtype": "pe_acquisition",
+        "keywords": [
+            "private equity", "pe-backed", "pe firm",
+            "recapitalization", "management buyout",
+            "equity firm", "portfolio company",
+            "private equity firm", "pe investment",
+        ],
+    },
+    "backlog": {
+        "score": 10,
+        "subtype": "backlog",
+        "keywords": [
+            "radiology backlog", "imaging backlog", "scan backlog",
+            "reading backlog", "radiologist shortage",
+            "radiology staffing shortage", "imaging wait times",
+            "radiology staffing crisis", "radiology wait times",
+        ],
+    },
     "rsna_acr": {
         "score": 6,
         "subtype": "rsna_acr",
