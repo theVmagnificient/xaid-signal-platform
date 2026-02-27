@@ -77,6 +77,7 @@ export interface SignalsQueryParams {
   min_score?: number
   limit?: number
   offset?: number
+  adjacent?: boolean
 }
 
 // ─── API Client ──────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ export async function fetchSignals(params: SignalsQueryParams = {}): Promise<Sig
     min_score: params.min_score,
     limit: params.limit ?? 50,
     offset: params.offset ?? 0,
+    adjacent: params.adjacent,
   })
   return request<SignalsResponse>(`/signals${query}`)
 }

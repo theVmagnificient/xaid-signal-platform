@@ -12,6 +12,7 @@ def list_signals(
     min_score: int = 1,
     limit: int = Query(50, le=200),
     offset: int = 0,
+    adjacent: Optional[bool] = None,
     db=Depends(get_db),
 ):
     q = (
@@ -26,6 +27,11 @@ def list_signals(
         q = q.eq("signal_type", signal_type)
     if status:
         q = q.eq("status", status)
+    if adjacent is True:
+        q = q.like("signal_subtype", "adjacent_%")
+    else:
+        # Default: exclude adjacent from main dashboard (covers adjacent=False and adjacent=None)
+        q = q.not_.like("signal_subtype", "adjacent_%")
 
     result = q.execute()
     return {"data": result.data, "count": len(result.data)}

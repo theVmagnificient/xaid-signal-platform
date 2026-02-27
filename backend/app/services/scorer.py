@@ -175,6 +175,41 @@ def score_job_posting(title: str, description: str = "") -> tuple[int, str]:
     return 0, ""
 
 
+# --- Adjacent specialties: track as weak signals for future pipeline expansion ---
+ADJACENT_TIERS = {
+    "adjacent_ir": {
+        "score": 4,
+        "subtype": "adjacent_ir",
+        "keywords": ["interventional radiologist", "musculoskeletal", "msk radiolog"],
+    },
+    "adjacent_oncology": {
+        "score": 3,
+        "subtype": "adjacent_oncology",
+        "keywords": ["radiation oncologist"],
+    },
+    "adjacent_imaging": {
+        "score": 3,
+        "subtype": "adjacent_imaging",
+        "keywords": ["nuclear medicine", "ultrasound", "mammograph", "breast imaging"],
+    },
+    "adjacent_tech": {
+        "score": 3,
+        "subtype": "adjacent_tech",
+        "keywords": ["ct technologist", "radiologic technologist", "radiology technician", "mri technologist"],
+    },
+}
+
+
+def score_adjacent_posting(title: str, description: str = "") -> tuple[int, str]:
+    """Return (score, subtype) for adjacent specialty job postings. 0 = not relevant."""
+    t = (title + " " + description).lower()
+    for tier in ADJACENT_TIERS.values():
+        for kw in tier["keywords"]:
+            if kw in t:
+                return tier["score"], tier["subtype"]
+    return 0, ""
+
+
 def score_news(title: str, description: str = "") -> tuple[int, str]:
     """Return (score, subtype) for a news item. 0 = not relevant."""
     t = (title + " " + description).lower()
