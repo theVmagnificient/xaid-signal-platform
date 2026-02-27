@@ -18,7 +18,6 @@ RADIOLOGY_QUERIES = [
     "radiologist",
     "body radiologist",
     "diagnostic radiologist",
-    "neuroradiologist",
     "chest radiologist",
 ]
 
@@ -50,6 +49,36 @@ async def fetch_theirstack_jobs(
                 return []
             data = resp.json()
             return data.get("data", [])
+    except Exception:
+        return []
+
+
+async def fetch_theirstack_by_name(
+    api_key: str,
+    company_names: list[str],
+    days_back: int = 7,
+) -> list[dict]:
+    """Query TheirStack by company name — for companies without a known domain."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                THEIRSTACK_API,
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "company_name_or": company_names,
+                    "job_title_or": RADIOLOGY_QUERIES,
+                    "posted_at_gte": cutoff,
+                    "limit": 100,
+                    "order_by": [{"field": "date_posted", "desc": True}],
+                },
+            )
+            if resp.status_code != 200:
+                return []
+            return resp.json().get("data", [])
     except Exception:
         return []
 
@@ -140,6 +169,14 @@ async def collect_job_posting_signals(
 
     # Bulk fetch for all domains at once
     jobs = await fetch_theirstack_by_keyword(settings.theirstack_api_key, days_back=7, company_domains=domains)
+
+    # Fallback: companies without domain — query by name in batches of 20
+    no_domain = [c for c in companies if not c.get("domain")]
+    for i in range(0, len(no_domain), 20):
+        batch = no_domain[i:i + 20]
+        names = [c["name"] for c in batch]
+        extra_jobs = await fetch_theirstack_by_name(settings.theirstack_api_key, names, days_back=7)
+        jobs.extend(extra_jobs)
 
     for job in jobs:
         # Match job back to our company

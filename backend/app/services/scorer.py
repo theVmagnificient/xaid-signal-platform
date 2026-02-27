@@ -142,6 +142,24 @@ NEWS_KEYWORDS = {
             "acquires imaging", "acquires radiology",
         ],
     },
+    "funding": {
+        "score": 8,
+        "subtype": "funding",
+        "keywords": [
+            "series a", "series b", "series c",
+            "raises $", "secures funding", "funding round",
+            "venture capital", "secures investment", "raises funding",
+        ],
+    },
+    "rsna_acr": {
+        "score": 6,
+        "subtype": "rsna_acr",
+        "keywords": [
+            "rsna 2024", "rsna 2025", "rsna annual meeting",
+            "acr annual", "radiological society of north america",
+            "american college of radiology annual",
+        ],
+    },
 }
 
 
