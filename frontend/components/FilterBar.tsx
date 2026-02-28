@@ -79,7 +79,7 @@ export default function FilterBar({ filters, onChange, totalCount, loading }: Fi
       {/* Row 2: status filter + score slider */}
       <div className="flex flex-wrap items-center gap-4">
         {/* Status filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Status</label>
           <select
             value={filters.status}
@@ -95,7 +95,7 @@ export default function FilterBar({ filters, onChange, totalCount, loading }: Fi
         </div>
 
         {/* Date filter */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Since</label>
           <select
             value={filters.since_days}

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { fetchCompany, updateSignalStatus, type CompanyDetail, type SignalStatus } from '@/lib/api'
+import { useToast } from '@/components/ToastProvider'
 import SignalCard from '@/components/SignalCard'
 import { getStageBadgeClass } from '@/lib/utils'
 
@@ -15,6 +16,7 @@ interface PageProps {
 export default function CompanyDetailPage({ params }: PageProps) {
   const { id } = params
 
+  const { addToast } = useToast()
   const [detail, setDetail]   = useState<CompanyDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState<string | null>(null)
@@ -38,14 +40,20 @@ export default function CompanyDetailPage({ params }: PageProps) {
   }, [load])
 
   async function handleStatusChange(signalId: string, status: SignalStatus) {
-    const updated = await updateSignalStatus(signalId, status)
-    setDetail((prev) => {
-      if (!prev) return prev
-      return {
-        ...prev,
-        signals: prev.signals.map((s) => (s.id === signalId ? { ...s, ...updated } : s)),
-      }
-    })
+    try {
+      const updated = await updateSignalStatus(signalId, status)
+      setDetail((prev) => {
+        if (!prev) return prev
+        return {
+          ...prev,
+          signals: prev.signals.map((s) => (s.id === signalId ? { ...s, ...updated } : s)),
+        }
+      })
+      addToast('Status updated.', 'success')
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to update signal.', 'error')
+      throw err  // re-throw so SignalCard can revert optimistic update
+    }
   }
 
   if (loading) return <DetailSkeleton />

@@ -13,7 +13,7 @@ export default function StatsBar({ stats, loading, onSyncClick, syncing }: Stats
   return (
     <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between mb-6">
       {/* Stat tiles */}
-      <div className="flex flex-wrap gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatTile
           label="Total Companies"
           value={stats?.total_companies}
@@ -98,7 +98,7 @@ function StatTile({
   accent?: Accent
 }) {
   return (
-    <div className={`card px-4 py-3 flex items-center gap-3 min-w-[140px]`}>
+    <div className="card px-4 py-3 flex items-center gap-3">
       <div className={`flex items-center justify-center w-8 h-8 rounded-lg ${accentBg[accent]}`}>
         {icon}
       </div>

@@ -10,6 +10,7 @@ import {
   type SignalStats,
   type SignalStatus,
 } from '@/lib/api'
+import { useToast } from '@/components/ToastProvider'
 import StatsBar from '@/components/StatsBar'
 import FilterBar, { type FilterState } from '@/components/FilterBar'
 import SignalCard from '@/components/SignalCard'
@@ -38,6 +39,8 @@ export default function DashboardPage() {
 
   const [syncing, setSyncing]     = useState(false)
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  const { addToast } = useToast()
 
   // Abort controller for in-flight signal fetches
   const abortRef = useRef<AbortController | null>(null)
@@ -72,6 +75,7 @@ export default function DashboardPage() {
         since_days: currentFilters.since_days || undefined,
         limit: PAGE_SIZE,
         offset: currentOffset,
+        signal: abortRef.current.signal,
       })
 
       if (append) {
@@ -109,10 +113,15 @@ export default function DashboardPage() {
 
   // ── Signal status update ───────────────────────────────────────────────────
   async function handleStatusChange(id: string, status: SignalStatus) {
-    const updated = await updateSignalStatus(id, status)
-    setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, ...updated } : s)))
-    // Refresh stats silently
-    loadStats()
+    try {
+      const updated = await updateSignalStatus(id, status)
+      setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, ...updated } : s)))
+      loadStats()
+      addToast('Status updated.', 'success')
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to update signal.', 'error')
+      throw err  // re-throw so SignalCard can revert optimistic update
+    }
   }
 
   // ── Sync trigger ───────────────────────────────────────────────────────────
@@ -128,6 +137,14 @@ export default function DashboardPage() {
       setSyncing(false)
     }
   }
+
+  // ── Auto-dismiss sync success banner after 5s ─────────────────────────────
+  useEffect(() => {
+    if (syncMessage?.type === 'success') {
+      const t = setTimeout(() => setSyncMessage(null), 5000)
+      return () => clearTimeout(t)
+    }
+  }, [syncMessage])
 
   // ── Sort signals: score desc, then date desc ───────────────────────────────
   const sorted = [...signals].sort((a, b) => {
@@ -183,7 +200,7 @@ export default function DashboardPage() {
       ) : signalsLoading && signals.length === 0 ? (
         <LoadingSkeleton />
       ) : sorted.length === 0 ? (
-        <EmptyState />
+        <EmptyState onRunSignals={handleSync} />
       ) : (
         <>
           <div className="flex flex-col gap-3">
@@ -198,7 +215,10 @@ export default function DashboardPage() {
 
           {/* Load more */}
           {hasMore && (
-            <div className="mt-6 flex justify-center">
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <p className="text-xs text-gray-400">
+                Showing {signals.length.toLocaleString()} of {count.toLocaleString()} signals
+              </p>
               <button
                 onClick={loadMore}
                 disabled={signalsLoading}
@@ -240,15 +260,30 @@ function LoadingSkeleton() {
   )
 }
 
-function EmptyState() {
+function EmptyState({ onRunSignals }: { onRunSignals?: () => void }) {
   return (
     <div className="card p-12 text-center">
       <div className="text-4xl mb-3">🔍</div>
       <h3 className="text-base font-semibold text-gray-700 mb-1">No signals found</h3>
-      <p className="text-sm text-gray-500">
+      <p className="text-sm text-gray-500 mb-4">
         Try adjusting filters or run a new signal collection.
       </p>
+      {onRunSignals && (
+        <button onClick={onRunSignals} className="btn-primary mx-auto">
+          <RefreshIcon className="w-4 h-4" />
+          Run Signals Now
+        </button>
+      )}
     </div>
+  )
+}
+
+function RefreshIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+    </svg>
   )
 }
 

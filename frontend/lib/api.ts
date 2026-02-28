@@ -79,6 +79,7 @@ export interface SignalsQueryParams {
   offset?: number
   adjacent?: boolean
   since_days?: number
+  signal?: AbortSignal
 }
 
 // ─── API Client ──────────────────────────────────────────────────────────────
@@ -132,7 +133,7 @@ export async function fetchSignals(params: SignalsQueryParams = {}): Promise<Sig
     adjacent: params.adjacent,
     since_days: params.since_days || undefined,
   })
-  return request<SignalsResponse>(`/signals${query}`)
+  return request<SignalsResponse>(`/signals${query}`, { signal: params.signal })
 }
 
 export async function fetchSignalStats(): Promise<SignalStats> {

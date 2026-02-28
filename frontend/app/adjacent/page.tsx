@@ -7,6 +7,7 @@ import {
   type Signal,
   type SignalStatus,
 } from '@/lib/api'
+import { useToast } from '@/components/ToastProvider'
 import SignalCard from '@/components/SignalCard'
 
 type StatusFilter = SignalStatus | ''
@@ -24,6 +25,7 @@ export default function AdjacentLeadsPage() {
   const [offset, setOffset]           = useState(0)
   const [hasMore, setHasMore]         = useState(false)
 
+  const { addToast } = useToast()
   const abortRef = useRef<AbortController | null>(null)
 
   const loadSignals = useCallback(async (currentStatus: StatusFilter, currentOffset: number, append = false) => {
@@ -40,6 +42,7 @@ export default function AdjacentLeadsPage() {
         since_days: sinceDays || undefined,
         limit: PAGE_SIZE,
         offset: currentOffset,
+        signal: abortRef.current.signal,
       })
       if (append) {
         setSignals((prev) => [...prev, ...res.data])
@@ -68,8 +71,14 @@ export default function AdjacentLeadsPage() {
   }
 
   async function handleStatusChange(id: string, newStatus: SignalStatus) {
-    const updated = await updateSignalStatus(id, newStatus)
-    setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, ...updated } : s)))
+    try {
+      const updated = await updateSignalStatus(id, newStatus)
+      setSignals((prev) => prev.map((s) => (s.id === id ? { ...s, ...updated } : s)))
+      addToast('Status updated.', 'success')
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to update signal.', 'error')
+      throw err  // re-throw so SignalCard can revert optimistic update
+    }
   }
 
   const sorted = [...signals].sort((a, b) => {

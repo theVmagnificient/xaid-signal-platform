@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { Signal, SignalStatus } from '@/lib/api'
 import {
   formatRelativeDate,
@@ -22,6 +22,10 @@ interface SignalCardProps {
 export default function SignalCard({ signal, onStatusChange }: SignalCardProps) {
   const [expanded, setExpanded] = useState(false)
   const [updating, setUpdating] = useState<SignalStatus | null>(null)
+  const [localStatus, setLocalStatus] = useState<SignalStatus>(signal.status)
+
+  // Sync localStatus when parent updates the signal
+  useEffect(() => setLocalStatus(signal.status), [signal.status])
 
   const borderClass = getScoreBorder(signal.score)
   const scoreBadge  = getScoreBadge(signal.score)
@@ -31,9 +35,13 @@ export default function SignalCard({ signal, onStatusChange }: SignalCardProps) 
 
   async function handleStatusChange(status: SignalStatus) {
     if (!onStatusChange) return
+    const prev = localStatus
+    setLocalStatus(status)  // optimistic
     setUpdating(status)
     try {
       await onStatusChange(signal.id, status)
+    } catch {
+      setLocalStatus(prev)  // revert on error
     } finally {
       setUpdating(null)
     }
@@ -58,9 +66,9 @@ export default function SignalCard({ signal, onStatusChange }: SignalCardProps) 
         </span>
 
         {/* Non-new status badge */}
-        {signal.status !== 'new' && (
-          <span className={`badge ${statusBadgeClass[signal.status]} ml-auto`}>
-            {statusLabel[signal.status]}
+        {localStatus !== 'new' && (
+          <span className={`badge ${statusBadgeClass[localStatus]} ml-auto`}>
+            {statusLabel[localStatus]}
           </span>
         )}
       </div>
@@ -142,7 +150,7 @@ export default function SignalCard({ signal, onStatusChange }: SignalCardProps) 
         {/* Action buttons */}
         {onStatusChange && (
           <div className="flex gap-1.5">
-            {signal.status === 'new' || signal.status === 'viewed' ? (
+            {localStatus === 'new' || localStatus === 'viewed' ? (
               <>
                 <button
                   disabled={updating !== null}
@@ -169,7 +177,7 @@ export default function SignalCard({ signal, onStatusChange }: SignalCardProps) 
                   Dismiss
                 </button>
               </>
-            ) : signal.status === 'actioned' || signal.status === 'dismissed' ? (
+            ) : localStatus === 'actioned' || localStatus === 'dismissed' ? (
               <button
                 disabled={updating !== null}
                 onClick={() => handleStatusChange('new')}
