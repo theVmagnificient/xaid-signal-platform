@@ -117,20 +117,36 @@ COMPETITOR_NAMES = [
     "bayer calantic", "nuance powerscribe", "powerscribe", "rad ai",
     "nanox", "avicenna", "qure.ai", "lunit", "oxipit", "intelerad",
     "change healthcare", "olive ai", "enlitic", "behold.ai",
+    # Additional AI/tech vendors that are not buyer targets
+    "vista ai", "sirona medical", "harrison.ai", "prenuvo",
+    "core sound", "vital ai", "deepnoid", "augmedix",
 ]
 
 # --- News: AI/PACS adoption signals ---
+#
+# context_required: if set, at least one word must appear in title+description
+# for the signal to be scored. Guards against generic matches (e.g. "deploys AI"
+# for call centers, "funding" for unrelated startups).
+#
 NEWS_KEYWORDS = {
     "ai_adoption": {
         "score": 9,
         "subtype": "ai_adoption",
+        # Must be about radiology / diagnostic imaging — not AI in general
+        "context_required": [
+            "radiology", "radiologist", "imaging", "diagnostic",
+            "ct scan", "mri", "x-ray", "reads", "scan",
+        ],
         "keywords": [
             # Org adopting / implementing AI — buyer intent phrases
             "implements ai", "implementing ai",
             "adopts ai", "adopting ai",
             "deploys ai", "deploying ai",
-            "launches ai", "ai-powered workflow",
-            "ai-assisted reading", "ai-powered reads",
+            "launches ai",
+            "using ai to", "hospitals using ai", "health system using ai",
+            # AI-assisted / AI-powered reads
+            "ai-assisted read", "ai-powered read", "ai-powered workflow",
+            "ai-powered imaging", "ai-powered radiology",
             # Radiology-specific (vendor-neutral)
             "artificial intelligence radiology", "machine learning radiology",
             "ai diagnostic imaging", "ai radiology solution", "ai radiology platform",
@@ -139,24 +155,36 @@ NEWS_KEYWORDS = {
     "pacs_upgrade": {
         "score": 8,
         "subtype": "pacs_upgrade",
+        # Vendor names removed — too broad. Only deployment-action keywords remain.
+        # These already imply radiology context, so no extra context_required needed.
+        "context_required": None,
         "keywords": [
-            "sectra", "ge healthc", "fujifilm pacs", "agfa pacs",
             "cloud pacs", "cloud-based pacs", "pacs migration",
             "new pacs", "pacs upgrade", "pacs implementation",
-            "vendor neutral archive", "vna",
+            "implements pacs", "deploys pacs",
+            "vendor neutral archive", "vna implementation",
         ],
     },
     "tech_adoption": {
         "score": 6,
         "subtype": "tech_adoption",
+        "context_required": None,  # keywords already radiology-specific
         "keywords": [
             "opens new imaging center", "expands radiology",
             "acquires imaging", "acquires radiology",
+            "expands imaging", "new imaging center", "opens imaging",
         ],
     },
     "funding": {
         "score": 8,
         "subtype": "funding",
+        # Must be a hospital / imaging org getting funded — not an AI startup
+        "context_required": [
+            "hospital", "health system", "imaging center", "radiology group",
+            "outpatient", "teleradiology", "medical center",
+            "healthcare system", "physician group", "imaging network",
+            "radiology practice", "imaging practice",
+        ],
         "keywords": [
             "series a", "series b", "series c",
             "raises $", "secures funding", "funding round",
@@ -166,6 +194,12 @@ NEWS_KEYWORDS = {
     "pe_acquisition": {
         "score": 9,
         "subtype": "pe_acquisition",
+        # Must be about a radiology / imaging org — not general healthcare PE
+        "context_required": [
+            "radiology", "imaging center", "imaging group", "imaging network",
+            "radiology group", "radiology practice", "teleradiology",
+            "diagnostic imaging", "outpatient imaging",
+        ],
         "keywords": [
             "private equity", "pe-backed", "pe firm",
             "recapitalization", "management buyout",
@@ -176,20 +210,12 @@ NEWS_KEYWORDS = {
     "backlog": {
         "score": 10,
         "subtype": "backlog",
+        "context_required": None,  # keywords already radiology-specific
         "keywords": [
             "radiology backlog", "imaging backlog", "scan backlog",
             "reading backlog", "radiologist shortage",
             "radiology staffing shortage", "imaging wait times",
             "radiology staffing crisis", "radiology wait times",
-        ],
-    },
-    "rsna_acr": {
-        "score": 6,
-        "subtype": "rsna_acr",
-        "keywords": [
-            "rsna 2024", "rsna 2025", "rsna annual meeting",
-            "acr annual", "radiological society of north america",
-            "american college of radiology annual",
         ],
     },
 }
@@ -258,7 +284,7 @@ def score_adjacent_posting(title: str, description: str = "") -> tuple[int, str]
 
 def score_news(title: str, description: str = "") -> tuple[int, str]:
     """Return (score, subtype) for a news item. 0 = not relevant."""
-    # If the headline is primarily about a competitor/vendor, it's not an actionable lead.
+    # If the headline is primarily about a competitor/vendor, skip.
     title_lower = title.lower()
     for competitor in COMPETITOR_NAMES:
         if competitor in title_lower:
@@ -266,10 +292,15 @@ def score_news(title: str, description: str = "") -> tuple[int, str]:
 
     t = (title + " " + description).lower()
     best_score, best_subtype = 0, ""
-    for category, cat_data in NEWS_KEYWORDS.items():
+    for cat_data in NEWS_KEYWORDS.values():
         for kw in cat_data["keywords"]:
-            if kw in t:
-                if cat_data["score"] > best_score:
-                    best_score = cat_data["score"]
-                    best_subtype = cat_data["subtype"]
+            if kw not in t:
+                continue
+            # Enforce context_required: at least one context word must appear
+            ctx = cat_data.get("context_required")
+            if ctx and not any(c in t for c in ctx):
+                continue
+            if cat_data["score"] > best_score:
+                best_score = cat_data["score"]
+                best_subtype = cat_data["subtype"]
     return best_score, best_subtype

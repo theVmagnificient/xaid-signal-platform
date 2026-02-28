@@ -108,6 +108,88 @@ GLOBAL_NEWS_QUERIES = [
     '"radiology" backlog OR shortage "hospital" OR "imaging center"',
 ]
 
+# Brave Search global queries — richer results, plain-text descriptions
+BRAVE_GLOBAL_QUERIES = [
+    "hospital implements AI radiology workflow",
+    "health system adopts AI radiology reads",
+    "imaging center deploys AI diagnostic",
+    "hospital radiology backlog shortage AI",
+]
+
+
+async def collect_brave_global_signals(
+    companies: list[dict],
+    db_client,
+    run_id: str,
+    api_key: str,
+) -> int:
+    """
+    Run global Brave Search queries for hospital/org AI adoption.
+    Match articles to known companies by name substring.
+    Returns count of signals inserted.
+    """
+    name_to_id = {c["name"]: c["id"] for c in companies if len(c["name"]) > 5}
+    signals_found = 0
+
+    for query in BRAVE_GLOBAL_QUERIES:
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.get(
+                    "https://api.search.brave.com/res/v1/news/search",
+                    headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
+                    params={"q": query, "count": 10, "freshness": "pw", "country": "us"},
+                )
+            if resp.status_code != 200:
+                continue
+            results = resp.json().get("results", [])
+        except Exception:
+            continue
+
+        for r in results:
+            title = r.get("title", "")
+            summary = r.get("description", "")
+            url = r.get("url", "")
+            source = r.get("meta_url", {}).get("hostname", "") or "Brave News"
+
+            if not url:
+                continue
+
+            score, subtype = score_news(title, summary)
+            if score == 0:
+                continue
+
+            text = (title + " " + summary).lower()
+            matched_ids = [cid for name, cid in name_to_id.items() if name.lower() in text]
+
+            targets = [(cid,) for cid in matched_ids] if matched_ids else [(None,)]
+            for (company_id,) in targets:
+                existing = (
+                    db_client.table("signals")
+                    .select("id")
+                    .eq("source_url", url)
+                    .execute()
+                )
+                if existing.data:
+                    continue
+                signal = {
+                    "company_id": company_id,
+                    "signal_type": "news",
+                    "signal_subtype": subtype,
+                    "title": f"[News] {title}",
+                    "description": summary[:500],
+                    "score": score,
+                    "source_url": url,
+                    "source_name": source,
+                    "raw_data": {"title": title, "summary": summary, "url": url, "query": query},
+                    "status": "new",
+                }
+                db_client.table("signals").insert(signal).execute()
+                signals_found += 1
+
+        await asyncio.sleep(0.5)
+
+    return signals_found
+
 
 async def collect_trade_rss_signals(
     companies: list[dict],
@@ -192,12 +274,20 @@ async def collect_global_news_signals(
     run_id: str,
 ) -> int:
     """
-    Run global Google News queries (not per-company).
+    Run global news queries (not per-company).
+    Uses Google News RSS + Brave Search global queries.
     Match articles to known companies by name substring.
     Returns count of signals inserted.
     """
-    name_to_id = {c["name"]: c["id"] for c in companies if len(c["name"]) > 5}
+    settings = get_settings()
     signals_found = 0
+
+    # Brave global queries (primary — richer, plain-text results)
+    if settings.brave_api_key:
+        found = await collect_brave_global_signals(companies, db_client, run_id, settings.brave_api_key)
+        signals_found += found
+
+    name_to_id = {c["name"]: c["id"] for c in companies if len(c["name"]) > 5}
     loop = asyncio.get_event_loop()
 
     subtype_map = {
@@ -290,7 +380,7 @@ async def collect_global_news_signals(
 
         await asyncio.sleep(1)
 
-    return signals_found
+    return signals_found  # includes Brave global count from above
 
 
 async def collect_news_signals(
