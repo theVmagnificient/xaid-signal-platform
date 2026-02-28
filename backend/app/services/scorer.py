@@ -110,18 +110,30 @@ JOB_POSTING_EXCLUSIONS = [
     "mri technologist",
 ]
 
+# Names of AI vendors / competitors — articles primarily about these are NOT leads.
+# Used to filter out vendor news in score_news().
+COMPETITOR_NAMES = [
+    "aidoc", "gleamer", "viz.ai", "rapid ai", "zebra medical",
+    "bayer calantic", "nuance powerscribe", "powerscribe", "rad ai",
+    "nanox", "avicenna", "qure.ai", "lunit", "oxipit", "intelerad",
+    "change healthcare", "olive ai", "enlitic", "behold.ai",
+]
+
 # --- News: AI/PACS adoption signals ---
 NEWS_KEYWORDS = {
     "ai_adoption": {
         "score": 9,
         "subtype": "ai_adoption",
         "keywords": [
-            # Radiology AI vendors
-            "aidoc", "gleamer", "nuance powerscribe", "viz.ai", "rapid ai",
-            "rad ai", "zebra medical", "bayer calantic",
-            # Radiology-specific AI terms
-            "ai-assisted reading", "ai radiology",
+            # Org adopting / implementing AI — buyer intent phrases
+            "implements ai", "implementing ai",
+            "adopts ai", "adopting ai",
+            "deploys ai", "deploying ai",
+            "launches ai", "ai-powered workflow",
+            "ai-assisted reading", "ai-powered reads",
+            # Radiology-specific (vendor-neutral)
             "artificial intelligence radiology", "machine learning radiology",
+            "ai diagnostic imaging", "ai radiology solution", "ai radiology platform",
         ],
     },
     "pacs_upgrade": {
@@ -246,6 +258,12 @@ def score_adjacent_posting(title: str, description: str = "") -> tuple[int, str]
 
 def score_news(title: str, description: str = "") -> tuple[int, str]:
     """Return (score, subtype) for a news item. 0 = not relevant."""
+    # If the headline is primarily about a competitor/vendor, it's not an actionable lead.
+    title_lower = title.lower()
+    for competitor in COMPETITOR_NAMES:
+        if competitor in title_lower:
+            return 0, ""
+
     t = (title + " " + description).lower()
     best_score, best_subtype = 0, ""
     for category, cat_data in NEWS_KEYWORDS.items():

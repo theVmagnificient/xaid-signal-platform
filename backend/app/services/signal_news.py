@@ -63,7 +63,7 @@ async def fetch_google_news(company_name: str, extra_query: str = "radiology AI"
 async def fetch_brave_news(company_name: str, api_key: str) -> list[dict]:
     """Brave Search News API — keyword search, plain-text descriptions, no HTML."""
     try:
-        query = f'"{company_name}" radiology AI OR PACS OR imaging'
+        query = f'"{company_name}" radiology implements OR adopts OR deploys AI OR backlog OR shortage OR "new imaging"'
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.get(
                 "https://api.search.brave.com/res/v1/news/search",
@@ -96,6 +96,203 @@ async def fetch_brave_news(company_name: str, api_key: str) -> list[dict]:
         return []
 
 
+TRADE_RSS_FEEDS = [
+    "https://www.auntminnie.com/rss/",
+    "https://radiologybusiness.com/feed",
+    "https://www.healthcaredive.com/feeds/news/",
+]
+
+GLOBAL_NEWS_QUERIES = [
+    '"imaging center" opens OR "new radiology" OR "opens MRI" OR "opens CT"',
+    '"hospital" OR "health system" OR "imaging center" "AI radiology" implements OR adopts OR deploys OR launches',
+    '"radiology" backlog OR shortage "hospital" OR "imaging center"',
+]
+
+
+async def collect_trade_rss_signals(
+    companies: list[dict],
+    db_client,
+    run_id: str,
+) -> int:
+    """
+    Fetch trade publication RSS feeds (AuntMinnie, RadBusiness, HealthcareDive).
+    Match articles to known companies by name substring.
+    Returns count of signals inserted.
+    """
+    # Build name → id lookup (skip very short names to avoid false matches)
+    name_to_id = {c["name"]: c["id"] for c in companies if len(c["name"]) > 5}
+    signals_found = 0
+
+    loop = asyncio.get_event_loop()
+
+    for feed_url in TRADE_RSS_FEEDS:
+        try:
+            feed = await loop.run_in_executor(None, feedparser.parse, feed_url)
+        except Exception:
+            continue
+
+        for entry in feed.entries[:30]:
+            title = entry.get("title", "")
+            summary = entry.get("summary", "")
+            url = entry.get("link", "")
+            source = feed.feed.get("title", feed_url)
+            text = (title + " " + summary).lower()
+
+            if not url:
+                continue
+
+            score, subtype = score_news(title, summary)
+            if score == 0:
+                continue
+
+            # Find matching companies
+            matched_ids: list[str] = []
+            for name, cid in name_to_id.items():
+                if name.lower() in text:
+                    matched_ids.append(cid)
+
+            # If no company match, skip (trade articles without company context aren't useful yet)
+            if not matched_ids:
+                continue
+
+            for company_id in matched_ids:
+                existing = (
+                    db_client.table("signals")
+                    .select("id")
+                    .eq("source_url", url)
+                    .eq("company_id", company_id)
+                    .execute()
+                )
+                if existing.data:
+                    continue
+
+                signal = {
+                    "company_id": company_id,
+                    "signal_type": "news",
+                    "signal_subtype": subtype,
+                    "title": f"[Trade] {title}",
+                    "description": _strip_html(summary)[:500],
+                    "score": score,
+                    "source_url": url,
+                    "source_name": source,
+                    "raw_data": {"title": title, "summary": summary, "url": url, "feed": feed_url},
+                    "status": "new",
+                }
+                db_client.table("signals").insert(signal).execute()
+                signals_found += 1
+
+        await asyncio.sleep(0.5)
+
+    return signals_found
+
+
+async def collect_global_news_signals(
+    companies: list[dict],
+    db_client,
+    run_id: str,
+) -> int:
+    """
+    Run global Google News queries (not per-company).
+    Match articles to known companies by name substring.
+    Returns count of signals inserted.
+    """
+    name_to_id = {c["name"]: c["id"] for c in companies if len(c["name"]) > 5}
+    signals_found = 0
+    loop = asyncio.get_event_loop()
+
+    subtype_map = {
+        GLOBAL_NEWS_QUERIES[0]: "new_clinic",
+        GLOBAL_NEWS_QUERIES[1]: "ai_adoption",
+        GLOBAL_NEWS_QUERIES[2]: "backlog",
+    }
+
+    for query in GLOBAL_NEWS_QUERIES:
+        url = GOOGLE_NEWS_RSS.format(query=query.replace(" ", "+").replace('"', '%22'))
+        try:
+            feed = await loop.run_in_executor(None, feedparser.parse, url)
+        except Exception:
+            await asyncio.sleep(1)
+            continue
+
+        for entry in feed.entries[:20]:
+            title = entry.get("title", "")
+            summary = entry.get("summary", "")
+            article_url = entry.get("link", "")
+            text = (title + " " + summary).lower()
+
+            if not article_url:
+                continue
+
+            score, subtype = score_news(title, summary)
+            forced_subtype = subtype_map[query]
+            # Use forced subtype if scorer didn't find one
+            if score == 0:
+                score = 5
+                subtype = forced_subtype
+            else:
+                subtype = forced_subtype
+
+            matched_ids: list[str] = []
+            for name, cid in name_to_id.items():
+                if name.lower() in text:
+                    matched_ids.append(cid)
+
+            if matched_ids:
+                for company_id in matched_ids:
+                    existing = (
+                        db_client.table("signals")
+                        .select("id")
+                        .eq("source_url", article_url)
+                        .eq("company_id", company_id)
+                        .execute()
+                    )
+                    if existing.data:
+                        continue
+                    signal = {
+                        "company_id": company_id,
+                        "signal_type": "news",
+                        "signal_subtype": subtype,
+                        "title": f"[Global] {title}",
+                        "description": _strip_html(summary)[:500],
+                        "score": score,
+                        "source_url": article_url,
+                        "source_name": entry.get("source", {}).get("title", "Google News"),
+                        "raw_data": {"title": title, "summary": summary, "url": article_url, "query": query},
+                        "status": "new",
+                    }
+                    db_client.table("signals").insert(signal).execute()
+                    signals_found += 1
+            else:
+                # Market intel with no company match — store with NULL company_id
+                existing = (
+                    db_client.table("signals")
+                    .select("id")
+                    .eq("source_url", article_url)
+                    .is_("company_id", "null")
+                    .execute()
+                )
+                if existing.data:
+                    continue
+                signal = {
+                    "company_id": None,
+                    "signal_type": "news",
+                    "signal_subtype": subtype,
+                    "title": f"[Global] {title}",
+                    "description": _strip_html(summary)[:500],
+                    "score": score,
+                    "source_url": article_url,
+                    "source_name": entry.get("source", {}).get("title", "Google News"),
+                    "raw_data": {"title": title, "summary": summary, "url": article_url, "query": query},
+                    "status": "new",
+                }
+                db_client.table("signals").insert(signal).execute()
+                signals_found += 1
+
+        await asyncio.sleep(1)
+
+    return signals_found
+
+
 async def collect_news_signals(
     companies: list[dict],
     db_client,
@@ -113,7 +310,7 @@ async def collect_news_signals(
         company_id = company["id"]
 
         # Fetch from Google News (free) — multiple targeted passes
-        news_items = await fetch_google_news(company_name, "radiology AI")
+        news_items = await fetch_google_news(company_name, "radiology AI implements OR adopts OR deploys OR expands imaging")
         funding_items = await fetch_google_news(company_name, "funding raises private equity acquisition radiology")
         backlog_items = await fetch_google_news(company_name, "radiology backlog staffing shortage wait times")
         news_items.extend(funding_items)
