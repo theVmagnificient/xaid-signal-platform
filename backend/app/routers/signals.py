@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from typing import Optional
+from datetime import datetime, timezone, timedelta
 from app.database import get_db
 
 router = APIRouter(prefix="/signals", tags=["signals"])
@@ -13,6 +14,7 @@ def list_signals(
     limit: int = Query(50, le=200),
     offset: int = 0,
     adjacent: Optional[bool] = None,
+    since_days: Optional[int] = None,
     db=Depends(get_db),
 ):
     q = (
@@ -27,6 +29,9 @@ def list_signals(
         q = q.eq("signal_type", signal_type)
     if status:
         q = q.eq("status", status)
+    if since_days:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days)).isoformat()
+        q = q.gte("detected_at", cutoff)
     if adjacent is True:
         q = q.like("signal_subtype", "adjacent_%")
     else:

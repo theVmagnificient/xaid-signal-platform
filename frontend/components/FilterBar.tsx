@@ -6,6 +6,7 @@ export interface FilterState {
   signal_type: SignalType | ''
   status: SignalStatus | ''
   min_score: number
+  since_days: number
 }
 
 interface FilterBarProps {
@@ -28,6 +29,14 @@ const STATUS_OPTIONS: { value: SignalStatus | ''; label: string }[] = [
   { value: 'viewed',    label: 'Viewed' },
   { value: 'actioned',  label: 'Reached Out' },
   { value: 'dismissed', label: 'Dismissed' },
+]
+
+const SINCE_OPTIONS: { value: number; label: string }[] = [
+  { value: 0,  label: 'Any time' },
+  { value: 1,  label: 'Today' },
+  { value: 7,  label: 'Last 7 days' },
+  { value: 30, label: 'Last 30 days' },
+  { value: 90, label: 'Last 90 days' },
 ]
 
 export default function FilterBar({ filters, onChange, totalCount, loading }: FilterBarProps) {
@@ -85,6 +94,22 @@ export default function FilterBar({ filters, onChange, totalCount, loading }: Fi
           </select>
         </div>
 
+        {/* Date filter */}
+        <div className="flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-500 whitespace-nowrap">Since</label>
+          <select
+            value={filters.since_days}
+            onChange={(e) => set('since_days', Number(e.target.value))}
+            className="input py-1 text-sm w-auto"
+          >
+            {SINCE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         {/* Score slider */}
         <div className="flex items-center gap-2 flex-1 min-w-[180px] max-w-xs">
           <label className="text-xs font-medium text-gray-500 whitespace-nowrap">
@@ -105,9 +130,9 @@ export default function FilterBar({ filters, onChange, totalCount, loading }: Fi
         </div>
 
         {/* Reset */}
-        {(filters.signal_type !== '' || filters.status !== '' || filters.min_score > 1) && (
+        {(filters.signal_type !== '' || filters.status !== '' || filters.min_score > 1 || filters.since_days > 0) && (
           <button
-            onClick={() => onChange({ signal_type: '', status: 'new', min_score: 1 })}
+            onClick={() => onChange({ signal_type: '', status: 'new', min_score: 1, since_days: 0 })}
             className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2"
           >
             Reset filters

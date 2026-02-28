@@ -12,6 +12,15 @@ export function formatRelativeDate(dateStr: string): string {
   }
 }
 
+export function formatShortDate(dateStr: string): string {
+  try {
+    const date = parseISO(dateStr)
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  } catch {
+    return dateStr
+  }
+}
+
 export function formatAbsoluteDate(dateStr: string): string {
   try {
     const date = parseISO(dateStr)

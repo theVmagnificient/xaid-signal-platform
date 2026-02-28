@@ -4,7 +4,7 @@ import { useState } from 'react'
 import type { Signal, SignalStatus } from '@/lib/api'
 import {
   formatRelativeDate,
-  formatAbsoluteDate,
+  formatShortDate,
   getScoreBorder,
   getScoreBadge,
   signalTypeLabel,
@@ -131,11 +131,11 @@ export default function SignalCard({ signal, onStatusChange }: SignalCardProps) 
           ) : null}
 
           <span
-            title={formatAbsoluteDate(signal.detected_at)}
+            title={formatRelativeDate(signal.detected_at)}
             className="flex items-center gap-1"
           >
             <ClockIcon className="w-3 h-3" />
-            {formatRelativeDate(signal.detected_at)}
+            {formatShortDate(signal.detected_at)}
           </span>
         </div>
 

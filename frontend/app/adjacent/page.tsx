@@ -20,6 +20,7 @@ export default function AdjacentLeadsPage() {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState<string | null>(null)
   const [status, setStatus]           = useState<StatusFilter>(DEFAULT_STATUS)
+  const [sinceDays, setSinceDays]     = useState(0)
   const [offset, setOffset]           = useState(0)
   const [hasMore, setHasMore]         = useState(false)
 
@@ -36,6 +37,7 @@ export default function AdjacentLeadsPage() {
       const res = await fetchSignals({
         adjacent: true,
         status: currentStatus || undefined,
+        since_days: sinceDays || undefined,
         limit: PAGE_SIZE,
         offset: currentOffset,
       })
@@ -57,7 +59,7 @@ export default function AdjacentLeadsPage() {
   useEffect(() => {
     setOffset(0)
     loadSignals(status, 0, false)
-  }, [status, loadSignals])
+  }, [status, sinceDays, loadSignals])
 
   function loadMore() {
     const newOffset = offset + PAGE_SIZE
@@ -85,8 +87,8 @@ export default function AdjacentLeadsPage() {
         </p>
       </div>
 
-      {/* Status filter + count */}
-      <div className="flex items-center gap-3 mb-5">
+      {/* Filters + count */}
+      <div className="flex flex-wrap items-center gap-3 mb-5">
         <div className="flex gap-1">
           {(['new', 'actioned', 'dismissed', ''] as StatusFilter[]).map((s) => (
             <button
@@ -102,6 +104,18 @@ export default function AdjacentLeadsPage() {
             </button>
           ))}
         </div>
+        <select
+          value={sinceDays}
+          onChange={(e) => setSinceDays(Number(e.target.value))}
+          className="input py-1 text-sm w-auto"
+        >
+          <option value={0}>Any time</option>
+          <option value={1}>Today</option>
+          <option value={7}>Last 7 days</option>
+          <option value={30}>Last 30 days</option>
+          <option value={90}>Last 90 days</option>
+        </select>
+
         {!loading && (
           <span className="text-sm text-gray-500 ml-auto">
             {count.toLocaleString()} signal{count !== 1 ? 's' : ''}

@@ -18,6 +18,7 @@ const DEFAULT_FILTERS: FilterState = {
   signal_type: '',
   status: 'new',
   min_score: 1,
+  since_days: 0,
 }
 
 const PAGE_SIZE = 50
@@ -68,6 +69,7 @@ export default function DashboardPage() {
         signal_type: currentFilters.signal_type || undefined,
         status: currentFilters.status || undefined,
         min_score: currentFilters.min_score > 1 ? currentFilters.min_score : undefined,
+        since_days: currentFilters.since_days || undefined,
         limit: PAGE_SIZE,
         offset: currentOffset,
       })
