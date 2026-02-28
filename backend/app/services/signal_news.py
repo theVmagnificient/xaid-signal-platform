@@ -43,9 +43,12 @@ async def fetch_google_news(company_name: str, extra_query: str = "radiology AI"
     url = GOOGLE_NEWS_RSS.format(query=query.replace(" ", "+").replace('"', '%22'))
 
     try:
-        # feedparser works sync; run in thread
+        # feedparser works sync; run in thread with 10s timeout
         loop = asyncio.get_event_loop()
-        feed = await loop.run_in_executor(None, feedparser.parse, url)
+        feed = await asyncio.wait_for(
+            loop.run_in_executor(None, feedparser.parse, url),
+            timeout=10.0,
+        )
         items = []
         for entry in feed.entries[:10]:
             items.append({
@@ -56,7 +59,7 @@ async def fetch_google_news(company_name: str, extra_query: str = "radiology AI"
                 "published": _parse_date(entry),
             })
         return items
-    except Exception:
+    except (Exception, asyncio.TimeoutError):
         return []
 
 

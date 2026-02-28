@@ -5,9 +5,10 @@ Sync endpoints — trigger signal collection and data import.
 from fastapi import APIRouter, BackgroundTasks, Depends
 from datetime import datetime, timezone
 from app.database import get_db
-from app.services.signal_news import collect_news_signals
+from app.services.signal_news import collect_news_signals, collect_trade_rss_signals, collect_global_news_signals
 from app.services.signal_job_postings import collect_job_posting_signals
 from app.services.signal_job_changes import collect_job_change_signals
+from app.services.signal_publications import collect_publication_signals
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -50,6 +51,27 @@ async def _run_signals(run_type: str, db):
     except Exception as e:
         errors.append({"type": "job_changes", "error": str(e)})
 
+    try:
+        if run_type in ("trade_rss", "full"):
+            found = await collect_trade_rss_signals(companies, db, run_id)
+            total_found += found
+    except Exception as e:
+        errors.append({"type": "trade_rss", "error": str(e)})
+
+    try:
+        if run_type in ("global_news", "full"):
+            found = await collect_global_news_signals(companies, db, run_id)
+            total_found += found
+    except Exception as e:
+        errors.append({"type": "global_news", "error": str(e)})
+
+    try:
+        if run_type in ("publications", "full"):
+            found = await collect_publication_signals(companies, db, run_id)
+            total_found += found
+    except Exception as e:
+        errors.append({"type": "publications", "error": str(e)})
+
     # Update run record
     db.table("signal_runs").update({
         "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -65,8 +87,8 @@ async def trigger_signal_run(
     run_type: str = "full",
     db=Depends(get_db),
 ):
-    """Trigger signal collection. run_type: full | news | job_postings | job_changes"""
-    allowed = {"full", "news", "job_postings", "job_changes"}
+    """Trigger signal collection. run_type: full | news | job_postings | job_changes | trade_rss | global_news | publications"""
+    allowed = {"full", "news", "job_postings", "job_changes", "trade_rss", "global_news", "publications"}
     if run_type not in allowed:
         return {"error": f"run_type must be one of {allowed}"}
     background_tasks.add_task(_run_signals, run_type, db)
