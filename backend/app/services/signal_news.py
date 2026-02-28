@@ -47,7 +47,7 @@ async def fetch_google_news(company_name: str, extra_query: str = "radiology AI"
         loop = asyncio.get_event_loop()
         feed = await asyncio.wait_for(
             loop.run_in_executor(None, feedparser.parse, url),
-            timeout=10.0,
+            timeout=5.0,
         )
         items = []
         for entry in feed.entries[:10]:
@@ -402,14 +402,10 @@ async def collect_news_signals(
         company_name = company["name"]
         company_id = company["id"]
 
-        # Fetch from Google News (free) — multiple targeted passes
-        news_items = await fetch_google_news(company_name, "radiology AI implements OR adopts OR deploys OR expands imaging")
-        funding_items = await fetch_google_news(company_name, "funding raises private equity acquisition radiology")
-        backlog_items = await fetch_google_news(company_name, "radiology backlog staffing shortage wait times")
-        news_items.extend(funding_items)
-        news_items.extend(backlog_items)
-
-        # Optionally augment with Brave Search News
+        # Per-company news via Brave Search (fast, no timeouts).
+        # Google News RSS is skipped here — it hangs too often on per-company queries
+        # and all market-wide coverage is handled by global_news + trade_rss runs.
+        news_items: list[dict] = []
         if settings.brave_api_key:
             brave_items = await fetch_brave_news(company_name, settings.brave_api_key)
             news_items.extend(brave_items)

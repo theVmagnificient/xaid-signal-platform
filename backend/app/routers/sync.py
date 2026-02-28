@@ -13,7 +13,7 @@ from app.services.signal_publications import collect_publication_signals
 router = APIRouter(prefix="/sync", tags=["sync"])
 
 
-async def _run_signals(run_type: str, db):
+async def _run_signals(run_type: str, db, news_limit: int = 300):
     """Core signal collection logic — runs in background."""
     run = (
         db.table("signal_runs")
@@ -30,7 +30,22 @@ async def _run_signals(run_type: str, db):
 
     try:
         if run_type in ("news", "full"):
-            found = await collect_news_signals(companies, db, run_id)
+            # For per-company news: only process companies that already have signals.
+            # This avoids iterating over all 9k+ companies for targeted per-company queries.
+            # Global/market-wide coverage is handled by global_news and trade_rss.
+            if run_type == "news":
+                rows = (
+                    db.table("signals")
+                    .select("company_id")
+                    .not_.is_("company_id", "null")
+                    .execute()
+                    .data
+                )
+                known_ids = {r["company_id"] for r in rows}
+                news_companies = [c for c in companies if c["id"] in known_ids][:news_limit]
+            else:
+                news_companies = companies[:news_limit]
+            found = await collect_news_signals(news_companies, db, run_id)
             total_found += found
     except Exception as e:
         errors.append({"type": "news", "error": str(e)})
@@ -85,14 +100,16 @@ async def _run_signals(run_type: str, db):
 async def trigger_signal_run(
     background_tasks: BackgroundTasks,
     run_type: str = "full",
+    news_limit: int = 300,
     db=Depends(get_db),
 ):
-    """Trigger signal collection. run_type: full | news | job_postings | job_changes | trade_rss | global_news | publications"""
+    """Trigger signal collection. run_type: full | news | job_postings | job_changes | trade_rss | global_news | publications.
+    news_limit: max companies to check for per-company news (default 300, applies to news/full run_types)."""
     allowed = {"full", "news", "job_postings", "job_changes", "trade_rss", "global_news", "publications"}
     if run_type not in allowed:
         return {"error": f"run_type must be one of {allowed}"}
-    background_tasks.add_task(_run_signals, run_type, db)
-    return {"status": "started", "run_type": run_type}
+    background_tasks.add_task(_run_signals, run_type, db, news_limit)
+    return {"status": "started", "run_type": run_type, "news_limit": news_limit}
 
 
 @router.get("/runs")
