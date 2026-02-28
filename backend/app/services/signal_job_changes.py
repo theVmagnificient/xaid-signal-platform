@@ -64,9 +64,12 @@ async def check_apollo_person(person_name: str, company_name: str, api_key: str)
         async with httpx.AsyncClient(timeout=15) as client:
             resp = await client.post(
                 "https://api.apollo.io/v1/people/match",
-                headers={"Content-Type": "application/json", "Cache-Control": "no-cache"},
+                headers={
+                    "Content-Type": "application/json",
+                    "Cache-Control": "no-cache",
+                    "X-Api-Key": api_key,
+                },
                 json={
-                    "api_key": api_key,
                     "name": person_name,
                     "organization_name": company_name,
                 },
