@@ -9,10 +9,25 @@ import httpx
 import asyncio
 import re
 import html as html_lib
-from datetime import datetime, timezone
+import time
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from app.services.scorer import score_news
 from app.config import get_settings
+
+NEWS_MAX_AGE_DAYS = 30
+
+
+def _is_recent(entry, max_days: int = NEWS_MAX_AGE_DAYS) -> bool:
+    """Return True if the feed entry was published within max_days. Allows through if date is missing."""
+    parsed = getattr(entry, "published_parsed", None)
+    if not parsed:
+        return True
+    try:
+        pub_dt = datetime.fromtimestamp(time.mktime(parsed), tz=timezone.utc)
+    except (OSError, OverflowError, ValueError):
+        return True
+    return pub_dt >= datetime.now(timezone.utc) - timedelta(days=max_days)
 
 
 def _strip_html(text: str) -> str:
@@ -217,6 +232,9 @@ async def collect_trade_rss_signals(
             continue
 
         for entry in feed.entries[:30]:
+            if not _is_recent(entry):
+                continue
+
             title = entry.get("title", "")
             summary = entry.get("summary", "")
             url = entry.get("link", "")
@@ -308,6 +326,9 @@ async def collect_global_news_signals(
             continue
 
         for entry in feed.entries[:20]:
+            if not _is_recent(entry):
+                continue
+
             title = entry.get("title", "")
             summary = entry.get("summary", "")
             article_url = entry.get("link", "")

@@ -21,7 +21,7 @@ from app.database import get_db
 from app.services.signal_news import collect_news_signals
 from app.services.signal_job_postings import collect_job_posting_signals
 from app.services.signal_job_changes import collect_job_change_signals
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from rich.console import Console
 
 console = Console()
@@ -42,6 +42,10 @@ async def run(run_type: str):
     errors = []
 
     if run_type in ("news", "full"):
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        deleted = db.table("signals").delete().eq("signal_type", "news").lt("detected_at", cutoff).execute()
+        console.print(f"[dim]Pruned old news signals (older than 30 days)[/dim]")
+
         console.print("[yellow]Collecting news signals...[/yellow]")
         try:
             found = await collect_news_signals(companies, db, run_id)
