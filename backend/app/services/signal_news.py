@@ -19,7 +19,7 @@ NEWS_MAX_AGE_DAYS = 30
 
 
 def _is_recent(entry, max_days: int = NEWS_MAX_AGE_DAYS) -> bool:
-    """Return True if the feed entry was published within max_days. Allows through if date is missing."""
+    """Return True if the feedparser entry was published within max_days. Allows through if date is missing."""
     parsed = getattr(entry, "published_parsed", None)
     if not parsed:
         return True
@@ -28,6 +28,18 @@ def _is_recent(entry, max_days: int = NEWS_MAX_AGE_DAYS) -> bool:
     except (OSError, OverflowError, ValueError):
         return True
     return pub_dt >= datetime.now(timezone.utc) - timedelta(days=max_days)
+
+
+def _brave_is_recent(result: dict, max_days: int = NEWS_MAX_AGE_DAYS) -> bool:
+    """Return True if the Brave Search result's page_age is within max_days. Allows through if missing."""
+    page_age = result.get("page_age", "")
+    if not page_age:
+        return True
+    try:
+        pub_dt = datetime.fromisoformat(page_age.replace("Z", "+00:00"))
+        return pub_dt >= datetime.now(timezone.utc) - timedelta(days=max_days)
+    except (ValueError, AttributeError):
+        return True
 
 
 def _strip_html(text: str) -> str:
@@ -101,6 +113,8 @@ async def fetch_brave_news(company_name: str, api_key: str) -> list[dict]:
             data = resp.json()
             items = []
             for r in data.get("results", []):
+                if not _brave_is_recent(r):
+                    continue
                 source = r.get("meta_url", {}).get("hostname", "") or r.get("source", "Brave News")
                 items.append({
                     "title": r.get("title", ""),
@@ -164,6 +178,9 @@ async def collect_brave_global_signals(
             continue
 
         for r in results:
+            if not _brave_is_recent(r):
+                continue
+
             title = r.get("title", "")
             summary = r.get("description", "")
             url = r.get("url", "")
