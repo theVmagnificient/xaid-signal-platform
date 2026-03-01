@@ -30,16 +30,40 @@ def _is_recent(entry, max_days: int = NEWS_MAX_AGE_DAYS) -> bool:
     return pub_dt >= datetime.now(timezone.utc) - timedelta(days=max_days)
 
 
-def _brave_is_recent(result: dict, max_days: int = NEWS_MAX_AGE_DAYS) -> bool:
-    """Return True if the Brave Search result's page_age is within max_days. Allows through if missing."""
-    page_age = result.get("page_age", "")
-    if not page_age:
-        return True
+def _parse_any_date(value: str) -> Optional[datetime]:
+    """Try to parse a date string in ISO 8601 or RFC 2822 format. Returns None if unparseable."""
+    if not value:
+        return None
+    # ISO 8601
     try:
-        pub_dt = datetime.fromisoformat(page_age.replace("Z", "+00:00"))
-        return pub_dt >= datetime.now(timezone.utc) - timedelta(days=max_days)
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except (ValueError, AttributeError):
-        return True
+        pass
+    # RFC 2822 (e.g. "Mon, 03 Feb 2025 08:00:00 GMT")
+    try:
+        import email.utils
+        parsed = email.utils.parsedate_to_datetime(value)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed
+    except Exception:
+        pass
+    return None
+
+
+def _brave_is_recent(result: dict, max_days: int = NEWS_MAX_AGE_DAYS) -> bool:
+    """Return True if the Brave Search result was published within max_days.
+    Checks page_age (ISO) and age (ISO or RFC 2822) fields. Falls back to True if unparseable."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_days)
+    for field in ("page_age", "age"):
+        pub_dt = _parse_any_date(result.get(field, ""))
+        if pub_dt is not None:
+            return pub_dt >= cutoff
+        # Heuristic: Brave sometimes returns relative strings like "1 year ago"
+        val = result.get(field, "").lower()
+        if val and "year" in val:
+            return False
+    return True
 
 
 def _strip_html(text: str) -> str:

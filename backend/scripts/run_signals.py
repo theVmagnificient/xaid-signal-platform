@@ -18,11 +18,24 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.database import get_db
-from app.services.signal_news import collect_news_signals
+from app.services.signal_news import collect_news_signals, _parse_any_date, NEWS_MAX_AGE_DAYS
 from app.services.signal_job_postings import collect_job_posting_signals
 from app.services.signal_job_changes import collect_job_change_signals
 from datetime import datetime, timezone, timedelta
 from rich.console import Console
+
+
+def _prune_old_news_by_pubdate(db, cutoff: datetime) -> None:
+    """Delete news signals whose raw_data published date is older than cutoff."""
+    rows = db.table("signals").select("id, raw_data").eq("signal_type", "news").execute().data
+    stale_ids = []
+    for row in rows:
+        pub_str = (row.get("raw_data") or {}).get("published", "")
+        pub_dt = _parse_any_date(pub_str)
+        if pub_dt is not None and pub_dt < cutoff:
+            stale_ids.append(row["id"])
+    if stale_ids:
+        db.table("signals").delete().in_("id", stale_ids).execute()
 
 console = Console()
 
@@ -42,8 +55,11 @@ async def run(run_type: str):
     errors = []
 
     if run_type in ("news", "full"):
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-        deleted = db.table("signals").delete().eq("signal_type", "news").lt("detected_at", cutoff).execute()
+        cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+        # Delete by detected_at (standard window)
+        db.table("signals").delete().eq("signal_type", "news").lt("detected_at", cutoff.isoformat()).execute()
+        # Also delete by actual publication date in raw_data (catches re-indexed old articles)
+        _prune_old_news_by_pubdate(db, cutoff)
         console.print(f"[dim]Pruned old news signals (older than 30 days)[/dim]")
 
         console.print("[yellow]Collecting news signals...[/yellow]")
