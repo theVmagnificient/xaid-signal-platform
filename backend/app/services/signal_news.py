@@ -484,12 +484,11 @@ async def collect_news_signals(
             if score == 0:
                 continue
 
-            # Check if we already have this signal (by URL)
+            # Check if we already have this signal (by URL globally — one insert per article)
             existing = (
                 db_client.table("signals")
                 .select("id")
                 .eq("source_url", url)
-                .eq("company_id", company_id)
                 .execute()
             )
             if existing.data:
