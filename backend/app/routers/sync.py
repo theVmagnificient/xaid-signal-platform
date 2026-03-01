@@ -3,14 +3,31 @@ Sync endpoints — trigger signal collection and data import.
 """
 
 from fastapi import APIRouter, BackgroundTasks, Depends
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from app.database import get_db
-from app.services.signal_news import collect_news_signals, collect_trade_rss_signals, collect_global_news_signals
+from app.services.signal_news import collect_news_signals, collect_trade_rss_signals, collect_global_news_signals, _parse_any_date
 from app.services.signal_job_postings import collect_job_posting_signals
 from app.services.signal_job_changes import collect_job_change_signals
 from app.services.signal_publications import collect_publication_signals
 
 router = APIRouter(prefix="/sync", tags=["sync"])
+
+
+def _prune_old_news(db) -> None:
+    """Delete news signals where the article's published date is older than 30 days."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+    # Fast path: delete by detected_at
+    db.table("signals").delete().eq("signal_type", "news").lt("detected_at", cutoff.isoformat()).execute()
+    # Slow path: delete by actual article pub date stored in raw_data
+    rows = db.table("signals").select("id, raw_data").eq("signal_type", "news").execute().data
+    stale_ids = []
+    for row in rows:
+        pub_str = (row.get("raw_data") or {}).get("published", "")
+        pub_dt = _parse_any_date(pub_str)
+        if pub_dt is not None and pub_dt < cutoff:
+            stale_ids.append(row["id"])
+    if stale_ids:
+        db.table("signals").delete().in_("id", stale_ids).execute()
 
 
 async def _run_signals(run_type: str, db, news_limit: int = 300):
@@ -27,6 +44,9 @@ async def _run_signals(run_type: str, db, news_limit: int = 300):
     companies = db.table("companies").select("id, name, domain").execute().data
     total_found = 0
     errors = []
+
+    if run_type in ("news", "full"):
+        _prune_old_news(db)
 
     try:
         if run_type in ("news", "full"):
