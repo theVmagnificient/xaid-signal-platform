@@ -18,7 +18,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.database import get_db
-from app.services.signal_news import collect_news_signals, _parse_any_date, NEWS_MAX_AGE_DAYS
+from app.services.signal_news import (
+    collect_news_signals,
+    collect_trade_rss_signals,
+    collect_global_news_signals,
+    _parse_any_date,
+    NEWS_MAX_AGE_DAYS,
+)
 from app.services.signal_job_postings import collect_job_posting_signals
 from app.services.signal_job_changes import collect_job_change_signals
 from datetime import datetime, timezone, timedelta
@@ -40,6 +46,9 @@ def _prune_old_news_by_pubdate(db, cutoff: datetime) -> None:
 console = Console()
 
 
+NEWS_COMPANY_LIMIT = 300
+
+
 async def run(run_type: str):
     db = get_db()
     console.print(f"[bold blue]Starting signal run: {run_type}[/bold blue]")
@@ -48,7 +57,14 @@ async def run(run_type: str):
     run_record = db.table("signal_runs").insert({"run_type": run_type}).execute().data[0]
     run_id = run_record["id"]
 
-    companies = db.table("companies").select("id, name, domain").execute().data
+    companies = []
+    offset = 0
+    while True:
+        batch = db.table("companies").select("id, name, domain").range(offset, offset + 999).execute().data
+        companies.extend(batch)
+        if len(batch) < 1000:
+            break
+        offset += 1000
     console.print(f"Loaded {len(companies)} companies")
 
     total_found = 0
@@ -62,14 +78,56 @@ async def run(run_type: str):
         _prune_old_news_by_pubdate(db, cutoff)
         console.print(f"[dim]Pruned old news signals (older than 30 days)[/dim]")
 
-        console.print("[yellow]Collecting news signals...[/yellow]")
+        # Per-company Brave Search — limit to companies that already have signals
+        rows = db.table("signals").select("company_id").not_.is_("company_id", "null").execute().data
+        known_ids = {r["company_id"] for r in rows}
+        news_companies = [c for c in companies if c["id"] in known_ids][:NEWS_COMPANY_LIMIT]
+        console.print(f"[yellow]Collecting per-company news signals ({len(news_companies)} companies)...[/yellow]")
         try:
-            found = await collect_news_signals(companies, db, run_id)
-            console.print(f"  [green]News signals: {found}[/green]")
+            found = await collect_news_signals(news_companies, db, run_id)
+            console.print(f"  [green]Per-company news signals: {found}[/green]")
             total_found += found
         except Exception as e:
             console.print(f"  [red]News error: {e}[/red]")
             errors.append({"type": "news", "error": str(e)})
+
+        console.print("[yellow]Collecting trade RSS signals...[/yellow]")
+        try:
+            found = await collect_trade_rss_signals(companies, db, run_id)
+            console.print(f"  [green]Trade RSS signals: {found}[/green]")
+            total_found += found
+        except Exception as e:
+            console.print(f"  [red]Trade RSS error: {e}[/red]")
+            errors.append({"type": "trade_rss", "error": str(e)})
+
+        console.print("[yellow]Collecting global news signals...[/yellow]")
+        try:
+            found = await collect_global_news_signals(companies, db, run_id)
+            console.print(f"  [green]Global news signals: {found}[/green]")
+            total_found += found
+        except Exception as e:
+            console.print(f"  [red]Global news error: {e}[/red]")
+            errors.append({"type": "global_news", "error": str(e)})
+
+    if run_type == "trade_rss":
+        console.print("[yellow]Collecting trade RSS signals...[/yellow]")
+        try:
+            found = await collect_trade_rss_signals(companies, db, run_id)
+            console.print(f"  [green]Trade RSS signals: {found}[/green]")
+            total_found += found
+        except Exception as e:
+            console.print(f"  [red]Trade RSS error: {e}[/red]")
+            errors.append({"type": "trade_rss", "error": str(e)})
+
+    if run_type == "global_news":
+        console.print("[yellow]Collecting global news signals...[/yellow]")
+        try:
+            found = await collect_global_news_signals(companies, db, run_id)
+            console.print(f"  [green]Global news signals: {found}[/green]")
+            total_found += found
+        except Exception as e:
+            console.print(f"  [red]Global news error: {e}[/red]")
+            errors.append({"type": "global_news", "error": str(e)})
 
     if run_type in ("job_postings", "full"):
         console.print("[yellow]Collecting job posting signals...[/yellow]")
@@ -111,6 +169,6 @@ async def run(run_type: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--type", default="full", choices=["full", "news", "job_postings", "job_changes"])
+    parser.add_argument("--type", default="full", choices=["full", "news", "job_postings", "job_changes", "trade_rss", "global_news"])
     args = parser.parse_args()
     asyncio.run(run(args.type))
